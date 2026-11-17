@@ -2341,6 +2341,31 @@ a.filter svg {
   color: var(--err);
 }
 
+.form-note {
+  margin: 0;
+  font-size: 0.84rem;
+}
+
+.form-error {
+  padding: 0.85rem 1rem;
+  border: 1px solid #e8baba;
+  border-radius: var(--r-sm);
+  background: #fff3f3;
+  color: #842d2d;
+  font-size: 0.86rem;
+  overflow-wrap: anywhere;
+}
+
+.form-error a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+form[aria-busy="true"] button[type="submit"] {
+  cursor: wait;
+  opacity: 0.7;
+}
+
 .field--check {
   flex-direction: row;
   align-items: flex-start;

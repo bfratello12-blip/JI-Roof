@@ -27,6 +27,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="assets/css/styles.css" />
+    <noscript><style>.reveal { opacity: 1; transform: none; }</style></noscript>
 
     <script type="application/ld+json">
       {
@@ -220,7 +221,10 @@
             <h2>Request your free roof inspection</h2>
             <p class="quote-card__sub">Tell us a little about your project and we'll call you back — usually the same day.</p>
 
-            <form data-lead-form novalidate>
+            <form data-lead-form action="https://formsubmit.co/jiservicesconstruction@gmail.com" method="POST">
+              <input type="hidden" name="_subject" value="New roof inspection request" />
+              <input type="hidden" name="_template" value="table" />
+              <input type="text" name="_honey" tabindex="-1" autocomplete="off" hidden />
               <div class="form-grid">
                 <div class="field field--full">
                   <label for="h-name">Full name <span class="req">*</span></label>
@@ -257,13 +261,18 @@
                   </select>
                   <span class="field__error" data-error-for="service"></span>
                 </div>
+                <div class="form-error field--full" data-form-error role="alert" tabindex="-1" hidden>
+                  We couldn't confirm your request was sent. Please try again or contact us at
+                  <a href="tel:+16315699084">631-569-9084</a> or
+                  <a href="mailto:jiservicesconstruction@gmail.com">jiservicesconstruction@gmail.com</a>.
+                </div>
                 <div class="field field--full">
-                  <button class="btn btn--primary btn--block btn--lg" type="submit">Claim My Free Inspection</button>
+                  <button class="btn btn--primary btn--block btn--lg" type="submit"><span data-submit-label>Claim My Free Inspection</span></button>
                 </div>
               </div>
               <p class="quote-card__fine">
                 <svg aria-hidden="true"><use href="#i-lock"/></svg>
-                No obligation, no pressure. We never sell or share your information.
+                <span>No obligation, no pressure. Your request is processed by <a href="https://formsubmit.co/">FormSubmit</a>, which retains a copy for up to 30 days.</span>
               </p>
             </form>
 

@@ -17,6 +17,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="assets/css/styles.css" />
+    <noscript><style>.reveal { opacity: 1; transform: none; }</style></noscript>
   </head>
 
   <body>
@@ -210,7 +211,10 @@
             <h2>Tell us about your project</h2>
             <p>The more detail you give us, the more accurate your estimate will be. Fields marked <span style="color: var(--err)">*</span> are required.</p>
 
-            <form data-lead-form novalidate style="margin-top: 1.75rem">
+            <form data-lead-form action="https://formsubmit.co/jiservicesconstruction@gmail.com" method="POST" style="margin-top: 1.75rem">
+              <input type="hidden" name="_subject" value="New roofing estimate request" />
+              <input type="hidden" name="_template" value="table" />
+              <input type="text" name="_honey" tabindex="-1" autocomplete="off" hidden />
               <div class="form-grid">
                 <div class="field">
                   <label for="c-name">Full name <span class="req">*</span></label>
@@ -298,12 +302,18 @@
 
                 <div class="field field--check field--full">
                   <input id="c-consent" name="consent" type="checkbox" required />
-                  <label for="c-consent">I agree to be contacted by JI Roofing &amp; Exteriors Corp about my request. We never sell or share your information. <span class="req">*</span></label>
+                  <label for="c-consent">I agree to be contacted by JI Roofing &amp; Exteriors Corp about my request. <span class="req">*</span></label>
                 </div>
                 <span class="field__error field--full" data-error-for="consent"></span>
+                <p class="form-note field--full">Your request is processed by <a href="https://formsubmit.co/">FormSubmit</a>, which retains a copy for up to 30 days.</p>
 
+                <div class="form-error field--full" data-form-error role="alert" tabindex="-1" hidden>
+                  We couldn't confirm your request was sent. Please try again or contact us at
+                  <a href="tel:+16315699084">631-569-9084</a> or
+                  <a href="mailto:jiservicesconstruction@gmail.com">jiservicesconstruction@gmail.com</a>.
+                </div>
                 <div class="field field--full">
-                  <button class="btn btn--primary btn--block btn--lg" type="submit">Send My Request <svg aria-hidden="true"><use href="#i-arrow"/></svg></button>
+                  <button class="btn btn--primary btn--block btn--lg" type="submit"><span data-submit-label>Send My Request</span> <svg aria-hidden="true"><use href="#i-arrow"/></svg></button>
                 </div>
               </div>
             </form>

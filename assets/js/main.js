@@ -346,6 +346,13 @@
     var emailRe = /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i;
 
     document.querySelectorAll("form[data-lead-form]").forEach(function (form) {
+      var error = form.querySelector("[data-form-error]");
+      var submitButton = form.querySelector('button[type="submit"]');
+      var submitLabel = form.querySelector("[data-submit-label]");
+      var originalLabel = submitLabel.textContent;
+      var sending = false;
+      form.noValidate = true;
+
       var showError = function (input, message) {
         var slot = form.querySelector('[data-error-for="' + input.name + '"]');
         if (slot) slot.textContent = message;
@@ -385,7 +392,12 @@
       });
 
       form.addEventListener("submit", function (e) {
-        e.preventDefault();
+        if (sending) {
+          e.preventDefault();
+          return;
+        }
+
+        error.hidden = true;
 
         var fields = Array.prototype.slice.call(
           form.querySelectorAll("input, select, textarea")
@@ -397,19 +409,56 @@
         });
 
         if (firstBad) {
+          e.preventDefault();
           firstBad.focus();
           return;
         }
 
-        // TODO: wire this up to a real endpoint (Formspree, Netlify Forms,
-        // or your own handler). Submission is simulated client-side for now.
-        var success = form.nextElementSibling;
-        form.classList.add("is-submitted");
-        if (success && success.classList.contains("form-success")) {
-          success.classList.add("is-visible");
-          success.setAttribute("tabindex", "-1");
-          success.focus();
-        }
+        if (!window.fetch || !window.FormData || !window.URL) return;
+
+        e.preventDefault();
+        var data = new FormData(form);
+        var endpoint = new URL(form.action);
+        endpoint.pathname = "/ajax" + endpoint.pathname;
+
+        sending = true;
+        submitButton.disabled = true;
+        submitLabel.textContent = "Sending...";
+        form.setAttribute("aria-busy", "true");
+
+        window.fetch(endpoint.href, {
+          method: "POST",
+          headers: { Accept: "application/json" },
+          body: data,
+        })
+          .then(function (response) {
+            if (!response.ok) {
+              throw new Error("FormSubmit returned HTTP " + response.status);
+            }
+            return response.json();
+          })
+          .then(function (result) {
+            if (result.success !== true && result.success !== "true") {
+              throw new Error(result.message || "FormSubmit did not confirm the submission");
+            }
+
+            var success = form.nextElementSibling;
+            form.classList.add("is-submitted");
+            if (success && success.classList.contains("form-success")) {
+              success.classList.add("is-visible");
+              success.setAttribute("tabindex", "-1");
+              success.focus();
+            }
+          })
+          .catch(function (submissionError) {
+            console.error("Could not submit lead form:", submissionError);
+            sending = false;
+            submitButton.disabled = false;
+            submitLabel.textContent = originalLabel;
+            form.removeAttribute("aria-busy");
+            error.hidden = false;
+            error.focus();
+          });
       });
     });
   }
