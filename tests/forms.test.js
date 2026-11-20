@@ -34,7 +34,7 @@ function makeElement(properties = {}) {
   }, properties);
 }
 
-function createForm(fetchResponse) {
+function createForm(fetchResponse, options = {}) {
   const fields = [
     makeElement({ name: "_subject", type: "hidden", value: "New roofing estimate request" }),
     makeElement({ name: "_template", type: "hidden", value: "table" }),
@@ -53,6 +53,7 @@ function createForm(fetchResponse) {
   ];
   const errors = new Map(fields.map(field => [field.name, makeElement()]));
   const error = makeElement({ hidden: true });
+  const errorMessage = makeElement({ textContent: "We couldn't confirm your request was sent." });
   const button = makeElement();
   const label = makeElement({ textContent: "Send My Request" });
   const success = makeElement();
@@ -63,6 +64,7 @@ function createForm(fetchResponse) {
     nextElementSibling: success,
     querySelector(selector) {
       if (selector === "[data-form-error]") return error;
+      if (selector === "[data-form-error-message]") return errorMessage;
       if (selector === 'button[type="submit"]') return button;
       if (selector === "[data-submit-label]") return label;
       const match = /^\[data-error-for="([^"]+)"\]$/.exec(selector);
@@ -86,11 +88,23 @@ function createForm(fetchResponse) {
 
   const requests = [];
   const logs = [];
-  const window = { FormData, URL };
+  const timers = new Map();
+  let nextTimerId = 0;
+  const window = {
+    FormData,
+    URL,
+    setTimeout(callback, delay) {
+      const id = ++nextTimerId;
+      timers.set(id, { callback, delay });
+      return id;
+    },
+    clearTimeout(id) { timers.delete(id); },
+  };
+  if (options.abortController !== false) window.AbortController = AbortController;
   if (fetchResponse) {
     window.fetch = function (url, options) {
       requests.push({ url, options });
-      return fetchResponse();
+      return fetchResponse(url, options);
     };
   }
   const document = {
@@ -109,7 +123,7 @@ function createForm(fetchResponse) {
   });
 
   return {
-    form, fields, errors, error, button, label, success, requests, logs,
+    form, fields, errors, error, errorMessage, button, label, success, requests, logs, timers,
     submit() {
       const event = {
         defaultPrevented: false,
@@ -117,6 +131,13 @@ function createForm(fetchResponse) {
       };
       form.dispatch("submit", event);
       return event;
+    },
+    expireTimeout() {
+      assert.equal(timers.size, 1);
+      const [id, timer] = timers.entries().next().value;
+      timers.delete(id);
+      timer.callback();
+      return timer.delay;
     },
   };
 }
@@ -154,7 +175,7 @@ test("both HTML forms post to the recipient and retain native validation", () =>
     for (const name of requiredFields) {
       assert.match(form[0], new RegExp(`<[^>]+name="${name}"[^>]+required`));
     }
-    for (const marker of ['name="_subject"', 'name="_template"', 'name="_honey"', "data-form-error", "data-submit-label", 'href="tel:+16315699084"', 'href="mailto:jiservicesconstruction@gmail.com"']) {
+    for (const marker of ['name="_subject"', 'name="_template"', 'name="_honey"', "data-form-error", "data-form-error-message", "data-submit-label", 'href="tel:+16315699084"', 'href="mailto:jiservicesconstruction@gmail.com"']) {
       assert.ok(form[0].includes(marker), `${file} includes ${marker}`);
     }
   }
@@ -166,6 +187,11 @@ test("valid submissions send all fields once and show confirmed success", async 
   const fixture = createForm(() => pending);
 
   assert.equal(fixture.submit().defaultPrevented, true);
+  assert.equal(fixture.button.disabled, true);
+  assert.equal(fixture.label.textContent, "Sending...");
+  assert.equal(fixture.form.getAttribute("aria-busy"), "true");
+  assert.equal(fixture.submit().defaultPrevented, true);
+  await settle();
   assert.equal(fixture.requests.length, 1);
   assert.equal(fixture.requests[0].url, "https://formsubmit.co/ajax/jiservicesconstruction@gmail.com");
   assert.equal(fixture.requests[0].options.method, "POST");
@@ -185,11 +211,6 @@ test("valid submissions send all fields once and show confirmed success", async 
     message: "Example project details",
     consent: "on",
   });
-  assert.equal(fixture.button.disabled, true);
-  assert.equal(fixture.label.textContent, "Sending...");
-  assert.equal(fixture.form.getAttribute("aria-busy"), "true");
-  assert.equal(fixture.submit().defaultPrevented, true);
-  assert.equal(fixture.requests.length, 1);
 
   resolveRequest({ ok: true, json: () => Promise.resolve({ success: "true" }) });
   await settle();
@@ -197,12 +218,14 @@ test("valid submissions send all fields once and show confirmed success", async 
   assert.equal(fixture.success.classList.contains("is-visible"), true);
   assert.equal(fixture.success.focused, true);
   assert.equal(fixture.error.hidden, true);
+  assert.equal(fixture.timers.size, 0);
 });
 
 for (const [name, getResponse] of [
   ["pending activation", () => response({ success: "false", message: "Form needs activation" })],
   ["HTTP failure", () => response({ success: true }, 500)],
   ["network failure", () => Promise.reject(new Error("Network error"))],
+  ["synchronous request failure", () => { throw new Error("Request failed"); }],
   ["invalid JSON", () => Promise.resolve({ ok: true, json: () => Promise.reject(new Error("Invalid JSON")) })],
   ["missing confirmation", () => response({})],
 ]) {
@@ -219,9 +242,80 @@ for (const [name, getResponse] of [
     assert.equal(fixture.label.textContent, "Send My Request");
     assert.equal(fixture.form.getAttribute("aria-busy"), null);
     assert.equal(fixture.fields.find(field => field.name === "message").value, "Example project details");
+    assert.equal(fixture.errorMessage.textContent, "We couldn't confirm your request was sent.");
     assert.equal(fixture.logs.length, 1);
+    assert.equal(fixture.timers.size, 0);
   });
 }
+
+test("a stalled request times out, is aborted, and can be retried without a late success", async () => {
+  const resolveRequests = [];
+  const fixture = createForm(() => new Promise(resolve => { resolveRequests.push(resolve); }));
+  fixture.submit();
+  await settle();
+
+  assert.equal(fixture.requests[0].options.signal.aborted, false);
+  assert.equal(fixture.expireTimeout(), 15000);
+  await settle();
+  assert.equal(fixture.requests[0].options.signal.aborted, true);
+  assert.equal(fixture.form.classList.contains("is-submitted"), false);
+  assert.equal(fixture.success.classList.contains("is-visible"), false);
+  assert.equal(fixture.error.hidden, false);
+  assert.equal(fixture.error.focused, true);
+  assert.equal(fixture.errorMessage.textContent, "The request timed out. It may still have been received.");
+  assert.equal(fixture.button.disabled, false);
+  assert.equal(fixture.label.textContent, "Send My Request");
+  assert.equal(fixture.form.getAttribute("aria-busy"), null);
+  assert.equal(fixture.fields.find(field => field.name === "message").value, "Example project details");
+  assert.equal(fixture.logs.length, 1);
+  assert.equal(fixture.timers.size, 0);
+
+  fixture.submit();
+  await settle();
+  assert.equal(fixture.requests.length, 2);
+  assert.equal(fixture.error.hidden, true);
+  resolveRequests[0]({ ok: true, json: () => Promise.resolve({ success: "true" }) });
+  await settle();
+  assert.equal(fixture.success.classList.contains("is-visible"), false);
+  assert.equal(fixture.button.disabled, true);
+
+  resolveRequests[1]({ ok: true, json: () => Promise.resolve({ success: true }) });
+  await settle();
+  assert.equal(fixture.success.classList.contains("is-visible"), true);
+  assert.equal(fixture.timers.size, 0);
+});
+
+test("a stalled response body is covered by the same timeout", async () => {
+  let resolveBody;
+  const fixture = createForm(() => Promise.resolve({
+    ok: true,
+    json: () => new Promise(resolve => { resolveBody = resolve; }),
+  }));
+  fixture.submit();
+  await settle();
+  assert.equal(typeof resolveBody, "function");
+  assert.equal(fixture.expireTimeout(), 15000);
+  await settle();
+  assert.equal(fixture.requests[0].options.signal.aborted, true);
+  assert.equal(fixture.error.hidden, false);
+  assert.equal(fixture.success.classList.contains("is-visible"), false);
+
+  resolveBody({ success: "true" });
+  await settle();
+  assert.equal(fixture.success.classList.contains("is-visible"), false);
+});
+
+test("a stalled request still times out without AbortController", async () => {
+  const fixture = createForm(() => new Promise(() => {}), { abortController: false });
+  fixture.submit();
+  await settle();
+  assert.equal(fixture.requests[0].options.signal, undefined);
+  assert.equal(fixture.expireTimeout(), 15000);
+  await settle();
+  assert.equal(fixture.error.hidden, false);
+  assert.equal(fixture.button.disabled, false);
+  assert.equal(fixture.success.classList.contains("is-visible"), false);
+});
 
 test("a failed request can be retried", async () => {
   let attempts = 0;

@@ -17,6 +17,9 @@ or domain.
 A request made before activation may display an error while it is awaiting
 confirmation. After activating, submit each form again and confirm that both
 emails arrive. Repeat this check if the website domain or recipient changes.
+If FormSubmit does not respond within 15 seconds, the form offers phone and
+email contact instead. A timed-out request may still be delivered, so check the
+inbox before resubmitting.
 Form submissions must be tested through a web server, not by opening the HTML
 files directly. If JavaScript is unavailable, the forms submit directly to
 FormSubmit, which may display its own verification and confirmation pages.

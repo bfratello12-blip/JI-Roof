@@ -344,9 +344,11 @@
   /* ----------------------------------------------------------------- Forms */
   function initForms() {
     var emailRe = /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i;
+    var submissionTimeoutMs = 15000;
 
     document.querySelectorAll("form[data-lead-form]").forEach(function (form) {
       var error = form.querySelector("[data-form-error]");
+      var errorMessage = form.querySelector("[data-form-error-message]");
       var submitButton = form.querySelector('button[type="submit"]');
       var submitLabel = form.querySelector("[data-submit-label]");
       var originalLabel = submitLabel.textContent;
@@ -426,18 +428,37 @@
         submitLabel.textContent = "Sending...";
         form.setAttribute("aria-busy", "true");
 
-        window.fetch(endpoint.href, {
+        var controller = window.AbortController ? new window.AbortController() : null;
+        var requestOptions = {
           method: "POST",
           headers: { Accept: "application/json" },
           body: data,
-        })
+        };
+        if (controller) requestOptions.signal = controller.signal;
+
+        var timedOut = false;
+        var timeoutId;
+        var timeout = new Promise(function (resolve, reject) {
+          timeoutId = window.setTimeout(function () {
+            timedOut = true;
+            if (controller) controller.abort();
+            reject(new Error("FormSubmit request timed out"));
+          }, submissionTimeoutMs);
+        });
+        var request = Promise.resolve()
+          .then(function () {
+            return window.fetch(endpoint.href, requestOptions);
+          })
           .then(function (response) {
             if (!response.ok) {
               throw new Error("FormSubmit returned HTTP " + response.status);
             }
             return response.json();
-          })
+          });
+
+        Promise.race([request, timeout])
           .then(function (result) {
+            window.clearTimeout(timeoutId);
             if (result.success !== true && result.success !== "true") {
               throw new Error(result.message || "FormSubmit did not confirm the submission");
             }
@@ -451,11 +472,15 @@
             }
           })
           .catch(function (submissionError) {
+            window.clearTimeout(timeoutId);
             console.error("Could not submit lead form:", submissionError);
             sending = false;
             submitButton.disabled = false;
             submitLabel.textContent = originalLabel;
             form.removeAttribute("aria-busy");
+            errorMessage.textContent = timedOut
+              ? "The request timed out. It may still have been received."
+              : "We couldn't confirm your request was sent.";
             error.hidden = false;
             error.focus();
           });
