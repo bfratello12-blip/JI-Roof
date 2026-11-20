@@ -344,11 +344,13 @@
   /* ----------------------------------------------------------------- Forms */
   function initForms() {
     var emailRe = /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i;
-    var submissionTimeoutMs = 15000;
+    var slowNoticeMs = 10000;
+    var submissionTimeoutMs = 120000;
 
     document.querySelectorAll("form[data-lead-form]").forEach(function (form) {
       var error = form.querySelector("[data-form-error]");
       var errorMessage = form.querySelector("[data-form-error-message]");
+      var status = form.parentElement.querySelector("[data-form-status]");
       var submitButton = form.querySelector('button[type="submit"]');
       var submitLabel = form.querySelector("[data-submit-label]");
       var originalLabel = submitLabel.textContent;
@@ -422,12 +424,22 @@
         var data = new FormData(form);
         var endpoint = new URL(form.action);
         endpoint.pathname = "/ajax" + endpoint.pathname;
+        var enabledFields = fields.filter(function (input) {
+          return !input.disabled;
+        });
 
         sending = true;
+        enabledFields.forEach(function (input) {
+          input.disabled = true;
+        });
         submitButton.disabled = true;
         submitLabel.textContent = "Sending...";
         form.setAttribute("aria-busy", "true");
 
+        var slowNoticeId = window.setTimeout(function () {
+          if (status) status.hidden = false;
+          submitLabel.textContent = "Still sending...";
+        }, slowNoticeMs);
         var controller = window.AbortController ? new window.AbortController() : null;
         var requestOptions = {
           method: "POST",
@@ -459,6 +471,8 @@
         Promise.race([request, timeout])
           .then(function (result) {
             window.clearTimeout(timeoutId);
+            window.clearTimeout(slowNoticeId);
+            if (status) status.hidden = true;
             if (result.success !== true && result.success !== "true") {
               throw new Error(result.message || "FormSubmit did not confirm the submission");
             }
@@ -473,11 +487,16 @@
           })
           .catch(function (submissionError) {
             window.clearTimeout(timeoutId);
+            window.clearTimeout(slowNoticeId);
             console.error("Could not submit lead form:", submissionError);
             sending = false;
+            enabledFields.forEach(function (input) {
+              input.disabled = false;
+            });
             submitButton.disabled = false;
             submitLabel.textContent = originalLabel;
             form.removeAttribute("aria-busy");
+            if (status) status.hidden = true;
             errorMessage.textContent = timedOut
               ? "The request timed out. It may still have been received."
               : "We couldn't confirm your request was sent.";
